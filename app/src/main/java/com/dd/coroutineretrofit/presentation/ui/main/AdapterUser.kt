@@ -1,12 +1,11 @@
-package com.dd.coroutineretrofit.user
+package com.dd.coroutineretrofit.presentation.ui.main
 
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.dd.coroutineretrofit.R
-import com.dd.coroutineretrofit.model.User
-import kotlinx.android.synthetic.main.content_item.view.*
+import com.dd.coroutineretrofit.data.network.model.User
 
 class AdapterUser(private val list: List<User>) : RecyclerView.Adapter<AdapterUser.ViewHolder>() {
 
@@ -16,8 +15,8 @@ class AdapterUser(private val list: List<User>) : RecyclerView.Adapter<AdapterUs
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.itemView.tv_hobby.text = list[position].hobby
-        holder.itemView.tv_name.text = list[position].name
+//        holder.itemView.tv_hobby.text = list[position].hobby
+//        holder.itemView.tv_name.text = list[position].name
     }
 
     override fun getItemCount(): Int {

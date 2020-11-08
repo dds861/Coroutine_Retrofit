@@ -1,4 +1,4 @@
-package com.dd.coroutineretrofit.user
+package com.dd.coroutineretrofit.presentation.ui.main
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
