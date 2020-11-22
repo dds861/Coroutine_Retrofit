@@ -1,357 +1,139 @@
 package com.dd.coroutineretrofit.presentation.ui.main
 
+import android.app.Application
 import android.util.Log
+import android.util.Patterns
+import androidx.lifecycle.LiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.liveData
+import androidx.lifecycle.viewModelScope
+import com.dd.coroutineretrofit.data.db.ProxyAddress
+import com.dd.coroutineretrofit.data.db.ProxyDatabase
 import com.dd.coroutineretrofit.data.repository.ApiRepository
-import com.dd.coroutineretrofit.presentation.model.ProxyAddress
+import com.dd.coroutineretrofit.data.repository.DatabaseRepository
+import com.dd.coroutineretrofit.presentation.ui.add.ProxyPresentation
 import kotlinx.coroutines.delay
-import java.io.IOException
+import kotlinx.coroutines.launch
+import java.util.*
 
-class MainActivityViewModel(private val eventManager: UIEventManager) : ViewModel() {
+class MainActivityViewModel(application: Application, private val eventManager: UIEventManager) :
+    ViewModel() {
 
-    fun loadDataFromWeb() = liveData {
-        getProxies().let {
-            for (i in it.indices) {
-//                delay(5000)
-                Log.i("autolog", "proxy send: ${it[i].ip}:${it[i].port}")
-                val repository = ApiRepository(it[i])
-                try {
-                    eventManager.showProgressBar()
-                    delay(1000)
-                    val receivedData = repository.postVote("125080")
-                    emit(receivedData)
-                } catch (e: IOException) {
-                    Log.i("autolog", "IOException: $e")
-                } catch (e: Exception) {
-                    Log.i("autolog", "Exception: $e")
+    private val databaseRepository: DatabaseRepository =
+        DatabaseRepository(ProxyDatabase.getDatabase(application, viewModelScope).getProxyDao())
+
+    val allProxies: LiveData<List<ProxyAddress>>
+    var isCancelIteration = false
+
+    init {
+        allProxies = databaseRepository.allProxies
+    }
+
+    private fun insert(proxyAddress: ProxyAddress) {
+        viewModelScope.launch {
+            databaseRepository.insert(proxyAddress)
+        }
+    }
+
+    private fun update(proxyAddress: ProxyAddress) {
+        viewModelScope.launch {
+            databaseRepository.updateProxy(proxyAddress)
+        }
+    }
+
+    private fun insertAllProxy(list: List<ProxyAddress>) {
+        viewModelScope.launch {
+            databaseRepository.insertAllProxy(list)
+        }
+    }
+
+    fun insertAllProxy(list: ArrayList<ProxyPresentation>) {
+        val proxies: List<ProxyAddress> = list.map {
+
+            var ip = it.ip
+            var port = it.port.toInt()
+
+            if (!Patterns.IP_ADDRESS.matcher(ip).matches()) {
+                ip = "0.0.0.0"
+                port = 0
+            }
+
+            ProxyAddress(
+                ip = ip,
+                port = port,
+                isUsed = false,
+                isSuccessfullySent = false,
+                requestFailureDescription = "unknown",
+                voteCounter = 0
+            )
+
+        }.filter {
+            it.ip != "0.0.0.0"
+        }
+
+        insertAllProxy(proxies)
+    }
+
+
+    fun startLoadDataFromWeb() = liveData {
+
+        databaseRepository.getUnUsedProxy().let {
+            loop@ for (i in it.indices) {
+
+                if (isCancelIteration) {
+                    break@loop
                 }
+
+                Log.i("autolog", "proxy send:${it[i].id} ${it[i].ip}:${it[i].port}")
+
+                val proxy = ProxyAddress(
+                    ip = it[i].ip,
+                    port = it[i].port,
+                    isUsed = false,
+                    isSuccessfullySent = false,
+                    requestFailureDescription = "unknown",
+                    voteCounter = 0
+                )
+
+                Log.i("autolog", "isProxyNew: true")
+                ApiRepository(it[i]).let { repository ->
+                    try {
+                        eventManager.showProgressBar()
+                        delay(1000)
+
+                        Log.i("autolog2", "Before send")
+                        val receivedData = repository.postVote("125080")
+                        Log.i("autolog2", "After send")
+
+
+
+                        update(
+                            proxy.copy(
+                                isUsed = true,
+                                isSuccessfullySent = true,
+                                requestFailureDescription = "successfull"
+                            )
+                        )
+                        eventManager.hideProgressBar()
+                        Log.i("autolog", "Sent successfully : ${receivedData}")
+                        emit(receivedData)
+                    } catch (e: Exception) {
+                        update(
+                            proxy.copy(
+                                isUsed = true,
+                                isSuccessfullySent = false,
+                                requestFailureDescription = e.message.toString()
+                            )
+                        )
+                        eventManager.hideProgressBar()
+                        eventManager.showToast("Not Successful")
+                        Log.i("autolog", "Exception: $e")
+                    }
+                }
+
             }
         }
     }
 
 
-    private fun getProxies(): List<ProxyAddress> {
-        return listOf(
-            ProxyAddress("169.57.1.84",25),
-            ProxyAddress("169.57.1.85",25),
-            ProxyAddress("169.57.157.148",25),
-            ProxyAddress("200.94.140.50",30682),
-            ProxyAddress("196.15.133.177",30930),
-            ProxyAddress("102.129.249.120",3128),
-            ProxyAddress("103.105.77.11",3128),
-            ProxyAddress("111.93.30.66",3128),
-            ProxyAddress("114.34.234.201",3128),
-            ProxyAddress("117.211.100.22",3128),
-            ProxyAddress("128.14.178.94",3128),
-            ProxyAddress("134.209.29.120",3128),
-            ProxyAddress("138.197.157.32",3128),
-            ProxyAddress("138.68.240.218",3128),
-            ProxyAddress("138.68.41.90",3128),
-            ProxyAddress("139.162.78.109",3128),
-            ProxyAddress("14.139.87.36",3128),
-            ProxyAddress("157.230.247.57",3128),
-            ProxyAddress("159.203.61.169",3128),
-            ProxyAddress("159.203.61.169",3128),
-            ProxyAddress("159.203.84.241",3128),
-            ProxyAddress("163.172.82.253",3128),
-            ProxyAddress("167.71.5.83",3128),
-            ProxyAddress("167.71.5.83",3128),
-            ProxyAddress("176.9.119.170",3128),
-            ProxyAddress("176.9.119.170",3128),
-            ProxyAddress("176.9.75.42",3128),
-            ProxyAddress("176.9.75.42",3128),
-            ProxyAddress("176.9.85.13",3128),
-            ProxyAddress("188.226.141.211",3128),
-            ProxyAddress("191.96.42.80",3128),
-            ProxyAddress("191.96.42.80",3128),
-            ProxyAddress("198.199.86.11",3128),
-            ProxyAddress("198.199.86.11",3128),
-            ProxyAddress("201.249.190.235",3128),
-            ProxyAddress("201.91.82.155",3128),
-            ProxyAddress("207.154.231.213",3128),
-            ProxyAddress("209.45.53.53",3128),
-            ProxyAddress("209.97.150.167",3128),
-            ProxyAddress("213.202.223.182",3128),
-            ProxyAddress("213.202.223.221",3128),
-            ProxyAddress("31.135.65.140",3128),
-            ProxyAddress("45.139.203.41",3128),
-            ProxyAddress("45.139.203.85",3128),
-            ProxyAddress("45.82.245.34",3128),
-            ProxyAddress("5.45.105.177",3128),
-            ProxyAddress("51.195.74.159",3128),
-            ProxyAddress("51.38.155.118",3128),
-            ProxyAddress("51.75.147.40",3128),
-            ProxyAddress("51.75.147.41",3128),
-            ProxyAddress("51.83.231.87",3128),
-            ProxyAddress("59.124.224.180",3128),
-            ProxyAddress("59.124.224.180",3128),
-            ProxyAddress("62.210.136.88",3128),
-            ProxyAddress("8.210.88.234",3128),
-            ProxyAddress("82.200.233.4",3128),
-            ProxyAddress("83.48.15.142",3128),
-            ProxyAddress("89.163.150.71",3128),
-            ProxyAddress("89.163.150.74",3128),
-            ProxyAddress("90.189.116.152",3128),
-            ProxyAddress("92.52.186.123",32329),
-            ProxyAddress("89.175.132.78",33857),
-            ProxyAddress("81.163.62.221",34011),
-            ProxyAddress("178.252.80.226",34730),
-            ProxyAddress("46.180.156.230",35808),
-            ProxyAddress("41.160.40.2",37741),
-            ProxyAddress("139.255.101.244",38041),
-            ProxyAddress("175.106.18.201",38708),
-            ProxyAddress("103.117.205.103",3888),
-            ProxyAddress("175.103.46.218",3888),
-            ProxyAddress("103.208.152.34",39887),
-            ProxyAddress("191.98.184.124",44021),
-            ProxyAddress("51.68.207.81",443),
-            ProxyAddress("36.94.130.176",48051),
-            ProxyAddress("70.184.13.81",48678),
-            ProxyAddress("24.172.34.114",49920),
-            ProxyAddress("78.157.254.58",51008),
-            ProxyAddress("1.20.101.62",52835),
-            ProxyAddress("181.129.183.19",53281),
-            ProxyAddress("190.145.200.126",53281),
-            ProxyAddress("91.192.2.168",53281),
-            ProxyAddress("103.86.155.102",55443),
-            ProxyAddress("36.92.57.235",55443),
-            ProxyAddress("213.98.67.40",57149),
-            ProxyAddress("186.159.8.218",58122),
-            ProxyAddress("83.174.203.222",59015),
-            ProxyAddress("91.230.199.174",61440),
-            ProxyAddress("81.174.11.159",61743),
-            ProxyAddress("100.26.149.44",80),
-            ProxyAddress("108.74.113.180",80),
-            ProxyAddress("119.206.242.196",80),
-            ProxyAddress("13.230.27.115",80),
-            ProxyAddress("13.245.36.242",80),
-            ProxyAddress("13.48.195.127",80),
-            ProxyAddress("13.48.27.1",80),
-            ProxyAddress("132.145.18.53",80),
-            ProxyAddress("139.99.102.114",80),
-            ProxyAddress("139.99.102.114",80),
-            ProxyAddress("142.93.57.37",80),
-            ProxyAddress("15.165.15.105",80),
-            ProxyAddress("15.222.2.98",80),
-            ProxyAddress("159.8.114.37",80),
-            ProxyAddress("167.86.98.179",80),
-            ProxyAddress("169.57.1.84",80),
-            ProxyAddress("169.57.157.148",80),
-            ProxyAddress("172.67.128.116",80),
-            ProxyAddress("172.67.146.139",80),
-            ProxyAddress("172.67.158.52",80),
-            ProxyAddress("172.67.165.253",80),
-            ProxyAddress("172.67.181.1",80),
-            ProxyAddress("172.67.181.10",80),
-            ProxyAddress("172.67.181.100",80),
-            ProxyAddress("172.67.181.103",80),
-            ProxyAddress("172.67.181.110",80),
-            ProxyAddress("172.67.181.111",80),
-            ProxyAddress("172.67.181.112",80),
-            ProxyAddress("172.67.181.113",80),
-            ProxyAddress("172.67.181.115",80),
-            ProxyAddress("172.67.181.118",80),
-            ProxyAddress("172.67.181.120",80),
-            ProxyAddress("172.67.181.122",80),
-            ProxyAddress("172.67.181.126",80),
-            ProxyAddress("172.67.181.128",80),
-            ProxyAddress("172.67.181.136",80),
-            ProxyAddress("172.67.181.138",80),
-            ProxyAddress("172.67.181.14",80),
-            ProxyAddress("172.67.181.142",80),
-            ProxyAddress("172.67.181.144",80),
-            ProxyAddress("172.67.181.146",80),
-            ProxyAddress("172.67.181.147",80),
-            ProxyAddress("172.67.181.15",80),
-            ProxyAddress("172.67.181.150",80),
-            ProxyAddress("172.67.181.155",80),
-            ProxyAddress("172.67.181.156",80),
-            ProxyAddress("172.67.181.158",80),
-            ProxyAddress("172.67.181.16",80),
-            ProxyAddress("172.67.181.162",80),
-            ProxyAddress("172.67.181.165",80),
-            ProxyAddress("172.67.181.166",80),
-            ProxyAddress("172.67.181.167",80),
-            ProxyAddress("172.67.181.170",80),
-            ProxyAddress("172.67.181.171",80),
-            ProxyAddress("172.67.181.173",80),
-            ProxyAddress("172.67.181.174",80),
-            ProxyAddress("172.67.181.180",80),
-            ProxyAddress("172.67.181.181",80),
-            ProxyAddress("172.67.181.19",80),
-            ProxyAddress("172.67.181.2",80),
-            ProxyAddress("172.67.181.21",80),
-            ProxyAddress("172.67.181.25",80),
-            ProxyAddress("172.67.181.26",80),
-            ProxyAddress("172.67.181.28",80),
-            ProxyAddress("172.67.181.30",80),
-            ProxyAddress("172.67.181.33",80),
-            ProxyAddress("172.67.181.34",80),
-            ProxyAddress("172.67.181.41",80),
-            ProxyAddress("172.67.181.42",80),
-            ProxyAddress("172.67.181.44",80),
-            ProxyAddress("172.67.181.49",80),
-            ProxyAddress("172.67.181.5",80),
-            ProxyAddress("172.67.181.51",80),
-            ProxyAddress("172.67.181.52",80),
-            ProxyAddress("172.67.181.54",80),
-            ProxyAddress("172.67.181.61",80),
-            ProxyAddress("172.67.181.62",80),
-            ProxyAddress("172.67.181.68",80),
-            ProxyAddress("172.67.181.69",80),
-            ProxyAddress("172.67.181.72",80),
-            ProxyAddress("172.67.181.75",80),
-            ProxyAddress("172.67.181.79",80),
-            ProxyAddress("172.67.181.82",80),
-            ProxyAddress("172.67.181.87",80),
-            ProxyAddress("172.67.181.89",80),
-            ProxyAddress("172.67.181.92",80),
-            ProxyAddress("172.67.181.93",80),
-            ProxyAddress("172.67.182.1",80),
-            ProxyAddress("172.67.182.103",80),
-            ProxyAddress("172.67.182.104",80),
-            ProxyAddress("172.67.182.107",80),
-            ProxyAddress("172.67.182.111",80),
-            ProxyAddress("172.67.182.114",80),
-            ProxyAddress("172.67.182.115",80),
-            ProxyAddress("172.67.182.117",80),
-            ProxyAddress("172.67.182.118",80),
-            ProxyAddress("172.67.182.125",80),
-            ProxyAddress("172.67.182.125",80),
-            ProxyAddress("172.67.182.126",80),
-            ProxyAddress("172.67.182.136",80),
-            ProxyAddress("172.67.182.139",80),
-            ProxyAddress("172.67.182.14",80),
-            ProxyAddress("172.67.182.144",80),
-            ProxyAddress("172.67.182.146",80),
-            ProxyAddress("172.67.182.150",80),
-            ProxyAddress("172.67.182.159",80),
-            ProxyAddress("172.67.182.163",80),
-            ProxyAddress("172.67.182.164",80),
-            ProxyAddress("172.67.182.23",80),
-            ProxyAddress("172.67.182.27",80),
-            ProxyAddress("172.67.182.31",80),
-            ProxyAddress("172.67.182.41",80),
-            ProxyAddress("172.67.182.45",80),
-            ProxyAddress("172.67.182.47",80),
-            ProxyAddress("172.67.182.49",80),
-            ProxyAddress("172.67.182.5",80),
-            ProxyAddress("172.67.182.51",80),
-            ProxyAddress("172.67.182.52",80),
-            ProxyAddress("172.67.182.55",80),
-            ProxyAddress("172.67.182.56",80),
-            ProxyAddress("172.67.182.58",80),
-            ProxyAddress("172.67.182.6",80),
-            ProxyAddress("172.67.182.62",80),
-            ProxyAddress("172.67.182.64",80),
-            ProxyAddress("172.67.182.67",80),
-            ProxyAddress("172.67.182.68",80),
-            ProxyAddress("172.67.182.69",80),
-            ProxyAddress("172.67.182.76",80),
-            ProxyAddress("172.67.182.78",80),
-            ProxyAddress("172.67.182.79",80),
-            ProxyAddress("172.67.182.84",80),
-            ProxyAddress("172.67.182.85",80),
-            ProxyAddress("172.67.182.85",80),
-            ProxyAddress("172.67.182.88",80),
-            ProxyAddress("172.67.182.90",80),
-            ProxyAddress("172.67.182.93",80),
-            ProxyAddress("172.67.182.94",80),
-            ProxyAddress("172.67.182.96",80),
-            ProxyAddress("172.67.182.98",80),
-            ProxyAddress("172.67.182.99",80),
-            ProxyAddress("172.67.222.111",80),
-            ProxyAddress("172.67.242.194",80),
-            ProxyAddress("175.141.69.200",80),
-            ProxyAddress("18.184.106.166",80),
-            ProxyAddress("180.250.12.10",80),
-            ProxyAddress("203.34.28.155",80),
-            ProxyAddress("3.210.202.176",80),
-            ProxyAddress("34.220.254.140",80),
-            ProxyAddress("34.221.146.181",80),
-            ProxyAddress("35.183.50.200",80),
-            ProxyAddress("35.235.115.241",80),
-            ProxyAddress("47.157.81.227",80),
-            ProxyAddress("47.75.90.57",80),
-            ProxyAddress("5.189.133.231",80),
-            ProxyAddress("51.68.207.81",80),
-            ProxyAddress("52.149.152.236",80),
-            ProxyAddress("52.40.6.184",80),
-            ProxyAddress("52.47.211.96",80),
-            ProxyAddress("78.47.16.54",80),
-            ProxyAddress("94.130.179.24",8024),
-            ProxyAddress("94.130.179.24",8041),
-            ProxyAddress("1.255.48.197",8080),
-            ProxyAddress("1.255.48.197",8080),
-            ProxyAddress("102.129.249.120",8080),
-            ProxyAddress("103.110.7.82",8080),
-            ProxyAddress("103.47.67.150",8080),
-            ProxyAddress("109.200.156.102",8080),
-            ProxyAddress("117.54.239.18",8080),
-            ProxyAddress("124.158.167.18",8080),
-            ProxyAddress("131.196.130.115",8080),
-            ProxyAddress("138.197.157.32",8080),
-            ProxyAddress("138.68.161.14",8080),
-            ProxyAddress("14.143.168.230",8080),
-            ProxyAddress("159.203.61.169",8080),
-            ProxyAddress("159.203.61.169",8080),
-            ProxyAddress("162.243.108.129",8080),
-            ProxyAddress("165.139.235.16",8080),
-            ProxyAddress("165.139.46.17",8080),
-            ProxyAddress("167.71.5.83",8080),
-            ProxyAddress("167.86.98.179",8080),
-            ProxyAddress("170.177.253.23",8080),
-            ProxyAddress("170.177.253.24",8080),
-            ProxyAddress("170.177.253.25",8080),
-            ProxyAddress("170.177.253.32",8080),
-            ProxyAddress("170.177.253.34",8080),
-            ProxyAddress("176.9.119.170",8080),
-            ProxyAddress("176.9.75.42",8080),
-            ProxyAddress("176.9.75.42",8080),
-            ProxyAddress("182.72.150.242",8080),
-            ProxyAddress("188.166.83.17",8080),
-            ProxyAddress("188.226.141.211",8080),
-            ProxyAddress("188.226.141.61",8080),
-            ProxyAddress("189.109.219.116",8080),
-            ProxyAddress("191.186.157.155",8080),
-            ProxyAddress("191.96.42.80",8080),
-            ProxyAddress("191.96.42.80",8080),
-            ProxyAddress("197.159.70.200",8080),
-            ProxyAddress("198.199.86.11",8080),
-            ProxyAddress("198.199.86.11",8080),
-            ProxyAddress("200.54.22.74",8080),
-            ProxyAddress("202.65.118.74",8080),
-            ProxyAddress("209.97.150.167",8080),
-            ProxyAddress("209.97.150.167",8080),
-            ProxyAddress("41.65.146.38",8080),
-            ProxyAddress("49.156.47.162",8080),
-            ProxyAddress("62.99.67.216",8080),
-            ProxyAddress("66.96.237.86",8080),
-            ProxyAddress("79.120.177.106",8080),
-            ProxyAddress("82.177.38.195",8080),
-            ProxyAddress("88.198.24.108",8080),
-            ProxyAddress("91.77.162.117",8080),
-            ProxyAddress("93.152.172.209",8080),
-            ProxyAddress("95.0.219.199",8080),
-            ProxyAddress("95.0.219.249",8080),
-            ProxyAddress("96.9.92.229",8080),
-            ProxyAddress("182.160.124.26",8081),
-            ProxyAddress("212.220.115.246",8081),
-            ProxyAddress("175.106.10.164",8089),
-            ProxyAddress("159.8.114.34",8123),
-            ProxyAddress("161.202.226.194",8123),
-            ProxyAddress("169.57.1.84",8123),
-            ProxyAddress("169.57.1.84",8123),
-            ProxyAddress("169.57.157.146",8123),
-            ProxyAddress("169.57.157.148",8123),
-            ProxyAddress("103.146.184.228",8181),
-            ProxyAddress("113.254.178.224",8193),
-            ProxyAddress("135.181.36.161",8888),
-            ProxyAddress("138.121.161.164",999),
-            ProxyAddress("181.224.162.133",999),
-            ProxyAddress("45.167.125.33",999),
-            ProxyAddress("45.186.145.113",999)
-        )
-    }
 }

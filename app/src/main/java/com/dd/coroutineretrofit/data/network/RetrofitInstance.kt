@@ -1,7 +1,7 @@
 package com.dd.coroutineretrofit.data.network
 
 import com.dd.coroutineretrofit.data.DataConstants
-import com.dd.coroutineretrofit.presentation.model.ProxyAddress
+import com.dd.coroutineretrofit.data.db.ProxyAddress
 import com.google.gson.GsonBuilder
 import okhttp3.ConnectionSpec
 import okhttp3.OkHttpClient
